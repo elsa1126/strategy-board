@@ -26,7 +26,12 @@ const pad2 = n => String(n).padStart(2, '0');
 
 // ===================== 狀態 =====================
 const COIN_DEFAULTS = () => ({ entry: 0, target: 0, stopLoss: 0, isHolding: false, lastManualUpdate: 0, note: '', entrySide: null, capital: 0, leverage: 1, manualStatus: null });
-const SYMBOL_RE = /^[A-Z0-9][A-Z0-9/._-]{0,19}$/;
+// 卡片代號 = 幣種代號；同一個幣開第 2 張以後用「#編號」區分，例如 SOL、SOL#2、SOL#3
+const SYMBOL_RE = /^[A-Z0-9][A-Z0-9/._-]{0,19}(#[2-9][0-9]?)?$/;
+const baseOf = k => String(k).replace(/#\d+$/, '');
+const dupNo = k => { const m = /#(\d+)$/.exec(String(k)); return m ? Number(m[1]) : 0; };
+const symBadge = k => dupNo(k) ? `<span class="dup">#${dupNo(k)}</span>` : '';
+function nextCardKey(base) { let n = 2; while (COIN_LIST.includes(`${base}#${n}`) && n < 99) n++; return `${base}#${n}`; }
 const CG_ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 const MANUAL_STATUSES = ['target_reached', 'stopped_out', 'no_market'];
 const isMetaKey = k => String(k).startsWith('__');
@@ -102,7 +107,7 @@ function syncCoinList() {
     COIN_LIST.forEach(c => { userSettings[c] = normalizeCoin(userSettings[c]); });
 }
 
-const cgIdOf = c => (userSettings[c] && userSettings[c].cgId) || COIN_ID_MAP[c] || null;
+const cgIdOf = c => (userSettings[c] && userSettings[c].cgId) || COIN_ID_MAP[baseOf(c)] || null;
 
 // ===================== 狀態判斷（與 v9.2 相同的規則，集中在一處） =====================
 function coinState(coin) {
@@ -487,14 +492,14 @@ async function fetchBinanceOne(pair) {
 }
 async function fetchBinancePrices(symbols) {
     const pairOf = {};
-    symbols.forEach(s => { pairOf[s] = BINANCE_BTC_PAIRS[s] || (s.replace('/', '') + 'USDT'); });
+    symbols.forEach(s => { const b = baseOf(s); pairOf[s] = BINANCE_BTC_PAIRS[b] || (b.replace('/', '') + 'USDT'); });
     const entries = await Promise.all(symbols.map(sym =>
         fetchBinanceOne(pairOf[sym]).then(v => [sym, v]).catch(e => { console.warn('[Binance 無資料]', sym, '→', pairOf[sym], e.message); return [sym, 0]; })
     ));
     const out = {};
     let anyOk = false;
     entries.forEach(([sym, v]) => {
-        if (v > 0) { anyOk = true; out[sym] = { price: v, change: 0, vol: 0, src: 'Binance', quote: BINANCE_BTC_PAIRS[sym] ? 'BTC' : 'USDT' }; }
+        if (v > 0) { anyOk = true; out[sym] = { price: v, change: 0, vol: 0, src: 'Binance', quote: BINANCE_BTC_PAIRS[baseOf(sym)] ? 'BTC' : 'USDT' }; }
     });
     if (!anyOk) throw new Error('Binance 全部請求失敗');
     return out;
@@ -517,9 +522,13 @@ async function fetchExchangeData(force = false) {
     if (!lastPriceOkAt) setPriceState('loading', '更新中…');
 
     try {
-        const binanceDirect = COIN_LIST.filter(c => BINANCE_ONLY.includes(c) || BINANCE_BTC_PAIRS[c]);
-        const mappedCoins = COIN_LIST.filter(c => cgIdOf(c) && !BINANCE_BTC_PAIRS[c]);   // /BTC 交易對只走幣安（單位不同，不能混用 CoinGecko 美元價）
-        const unmapped = COIN_LIST.filter(c => !cgIdOf(c) && !binanceDirect.includes(c));
+        // 同一個幣開了好幾張卡片時，只查一次報價（用第一張當代表），查完再分給同幣種的每一張
+        const reps = {};
+        COIN_LIST.forEach(c => { const b = baseOf(c); if (!reps[b]) reps[b] = c; });
+        const repList = Object.values(reps);
+        const binanceDirect = repList.filter(c => BINANCE_ONLY.includes(baseOf(c)) || BINANCE_BTC_PAIRS[baseOf(c)]);
+        const mappedCoins = repList.filter(c => cgIdOf(c) && !BINANCE_BTC_PAIRS[baseOf(c)]);   // /BTC 交易對只走幣安（單位不同，不能混用 CoinGecko 美元價）
+        const unmapped = repList.filter(c => !cgIdOf(c) && !binanceDirect.includes(c));
         if (unmapped.length) console.warn('[缺少 CoinGecko ID 對照]', unmapped.join(', '));
         const batches = splitIntoBatches(mappedCoins);
         const results = await Promise.allSettled(batches.map((b, i) =>
@@ -528,7 +537,7 @@ async function fetchExchangeData(force = false) {
 
         const cgMerged = {};
         results.forEach(r => { if (r.status === 'fulfilled') Object.assign(cgMerged, r.value); });
-        const binanceList = binanceDirect.concat(BINANCE_FALLBACK.filter(c => COIN_LIST.includes(c) && !cgMerged[c]));
+        const binanceList = binanceDirect.concat(repList.filter(c => BINANCE_FALLBACK.includes(baseOf(c)) && !cgMerged[c]));
         let binanceOk = false;
         if (binanceList.length) {
             try { Object.assign(cgMerged, await fetchBinancePrices(binanceList)); binanceOk = true; }
@@ -561,8 +570,9 @@ async function fetchExchangeData(force = false) {
             results.forEach((r, i) => { if (r.status !== 'fulfilled') batches[i].forEach(c => failedBatchCoins.add(c)); });
             if (!binanceOk) binanceList.forEach(c => failedBatchCoins.add(c));
             COIN_LIST.forEach(coin => {
-                if (cgMerged[coin]) marketData[coin] = cgMerged[coin];
-                else if (failedBatchCoins.has(coin) && marketData[coin]) { /* 該批次失敗：保留舊價 */ }
+                const rep = reps[baseOf(coin)];
+                if (cgMerged[rep]) marketData[coin] = cgMerged[rep];
+                else if (failedBatchCoins.has(rep) && marketData[coin]) { /* 該批次失敗：保留舊價 */ }
                 else marketData[coin] = { price: 0, change: 0, vol: 0, src: '--' };
             });
             lastFetchAt = Date.now();
@@ -753,6 +763,8 @@ function importSettings() {
         r.onload = ev => {
             try {
                 const imp = JSON.parse(ev.target.result); let c = 0;
+                const rm = removedSet();
+                Object.keys(imp).forEach(k => { const K = k.toUpperCase(); if (!isMetaKey(k) && K.includes('#') && SYMBOL_RE.test(K) && !rm.has(K) && !COIN_LIST.includes(K) && imp[k] && typeof imp[k] === 'object') { COIN_LIST.push(K); userSettings[K] = COIN_DEFAULTS(); } });
                 COIN_LIST.forEach(coin => { if (imp[coin] && typeof imp[coin] === 'object') { userSettings[coin] = normalizeCoin(Object.assign({}, userSettings[coin], imp[coin])); c++ } });
                 saveSettings(); renderCards(); gdUpdate(); showToast(`已匯入 ${c} 筆策略（只存在這台裝置）`)
             } catch (err) { showToast('檔案格式不正確', 'error') }
@@ -941,9 +953,9 @@ function cardHtml(coin) {
         }
     }
 
-    return `<article class="${cls.join(' ')}" data-coin="${escH(coin)}" role="button" tabindex="0" aria-label="${escH(coin)} 詳情">
+    return `<article class="${cls.join(' ')}" data-coin="${escH(coin)}" role="button" tabindex="0" aria-label="${escH(baseOf(coin))}${dupNo(coin) ? ' #' + dupNo(coin) : ''} 詳情">
         <div class="c-head">
-            <div class="sym"><span class="sym-name">${escH(coin)}</span>${tagsHtml(st)}</div>
+            <div class="sym"><span class="sym-name">${escH(baseOf(coin))}${symBadge(coin)}</span>${tagsHtml(st)}</div>
             <span class="chg ${isUp ? 'up' : 'down'}">${isUp ? '▲' : '▼'} ${Math.abs(Number(m.change)).toFixed(2)}%</span>
         </div>
         <div class="c-body">
@@ -1008,7 +1020,7 @@ function rowHtml(coin) {
     else mob = '<span class="muted">--</span>';
     const rc = st.stoppedOut ? 'is-stopped' : st.targetHit ? 'is-target' : st.holding ? 'is-holding' : '';
     const cells = {
-        name: `<span class="l-sym"><b>${escH(coin)}</b><small class="${stateCls}">${stateTxt}</small></span>`,
+        name: `<span class="l-sym"><b>${escH(baseOf(coin))}${symBadge(coin)}</b><small class="${stateCls}">${stateTxt}</small></span>`,
         price: `<span class="l-price">${formatPrice(m.price)}</span>`,
         chg: `<span class="${isUp ? 'up' : 'down'}">${isUp ? '+' : '-'}${Math.abs(Number(m.change)).toFixed(2)}%</span>`,
         entry: e ? formatPrice(e) : '--',
@@ -1019,7 +1031,7 @@ function rowHtml(coin) {
         time: `<span class="muted">${formatRelativeTime(s.lastManualUpdate)}</span>`,
         mob
     };
-    return `<div class="lrow ${rc}" data-coin="${escH(coin)}" role="button" tabindex="0" aria-label="${escH(coin)} 詳情">${LIST_COLS.map(c => `<div class="${c.cls || ''}">${cells[c.k]}</div>`).join('')}</div>`;
+    return `<div class="lrow ${rc}" data-coin="${escH(coin)}" role="button" tabindex="0" aria-label="${escH(baseOf(coin))}${dupNo(coin) ? ' #' + dupNo(coin) : ''} 詳情">${LIST_COLS.map(c => `<div class="${c.cls || ''}">${cells[c.k]}</div>`).join('')}</div>`;
 }
 
 function listHeadHtml() {
@@ -1060,7 +1072,7 @@ function renderBottomSheet(isEdit) {
     const isUp = Number(m.change) >= 0;
     const expectedGain = entry > 0 && target > 0 ? ((target - entry) / entry * 100).toFixed(2) : '--';
     const expectedLoss = entry > 0 && sl > 0 ? ((entry - sl) / entry * 100).toFixed(2) : '--';
-    const [base, quote] = coin.split('/');
+    const [base, quote] = baseOf(coin).split('/');
     const c = $('#sheet-content');
 
     if (!isEdit) {
@@ -1074,7 +1086,7 @@ function renderBottomSheet(isEdit) {
         c.innerHTML = `
         <div class="d-head">
             <div>
-                <h3 class="d-title">${escH(base)}<small>/${escH(quote || 'USDT')}</small><span class="src">${escH(m.src)}</span></h3>
+                <h3 class="d-title">${escH(base)}<small>/${escH(quote || 'USDT')}</small>${symBadge(coin)}<span class="src">${escH(m.src)}</span></h3>
                 <div class="d-price ${isUp ? 'up' : 'down'}">${formatPrice(m.price)}<small>${isUp ? '+' : ''}${Number(m.change).toFixed(2)}%</small></div>
             </div>
             ${statusTag}
@@ -1102,7 +1114,7 @@ function renderBottomSheet(isEdit) {
     const sug = sumCapital > 0 ? (sumCapital * 0.05).toFixed(2) : null;
     const opt = (v, t) => `<option value="${v}"${dropdownValue === v ? ' selected' : ''}>${t}</option>`;
     c.innerHTML = `
-    <div class="d-head"><h3 class="d-title">${escH(coin.includes('/') ? coin : coin + '/USDT')}<small>編輯計畫</small></h3></div>
+    <div class="d-head"><h3 class="d-title">${escH(baseOf(coin).includes('/') ? baseOf(coin) : baseOf(coin) + '/USDT')}${symBadge(coin)}<small>編輯計畫</small></h3></div>
     <form class="form" id="edit-form" novalidate>
         <div><label class="lbl" for="edit-holding">交易狀態</label>
             <select id="edit-holding">${opt('false', '觀望中')}${opt('true', '已進場')}${opt('target_reached', '已達標')}${opt('stopped_out', '已止損')}${opt('no_market', '未有適配市場')}</select></div>
@@ -1203,9 +1215,9 @@ async function searchCoin(q) {
         box.innerHTML = addCoinCandidates.map((x, i) => {
             const sym = String(x.symbol || '').toUpperCase();
             const exists = COIN_LIST.includes(sym), blocked = REMOVED_COINS.includes(sym);
-            return `<button type="button" class="result" data-action="add-coin-pick" data-i="${i}"${exists || blocked ? ' disabled' : ''}>
+            return `<button type="button" class="result" data-action="add-coin-pick" data-i="${i}"${blocked ? ' disabled' : ''}>
                 <span><b>${escH(sym)}</b><small>${escH(x.name)} · ${escH(x.id)}</small></span>
-                <small>${exists ? '已在清單' : blocked ? '設定檔已停用' : x.market_cap_rank ? '市值第 ' + escH(x.market_cap_rank) + ' 名' : '無市值排名'}</small></button>`;
+                <small>${exists ? '已在清單，點一下再加一張' : blocked ? '設定檔已停用' : x.market_cap_rank ? '市值第 ' + escH(x.market_cap_rank) + ' 名' : '無市值排名'}</small></button>`;
         }).join('');
     } catch (e) {
         box.innerHTML = `<p class="hint">搜尋失敗：${escH(e.message)}</p>`;
@@ -1216,17 +1228,27 @@ async function pickCoin(i) {
     const x = addCoinCandidates[i]; if (!x) return;
     const sym = String(x.symbol || '').toUpperCase();
     if (!SYMBOL_RE.test(sym) || !CG_ID_RE.test(x.id)) { showToast('這個幣種代號無法使用', 'error'); return; }
-    if (COIN_LIST.includes(sym)) { showToast(sym + ' 已在清單中', 'error'); return; }
     if (REMOVED_COINS.includes(sym)) { showToast(sym + ' 在 config.js 的 REMOVED_COINS 裡被停用，要先從那裡拿掉', 'error'); return; }
+    // 已經有這個幣的話，就多開一張卡片（SOL#2、SOL#3…）
+    if (COIN_LIST.filter(c => baseOf(c) === sym).length >= 20) { showToast('同一個幣種最多 20 張卡片', 'error'); return; }
+    const key = COIN_LIST.includes(sym) ? nextCardKey(sym) : sym;
     const settings = Object.assign(COIN_DEFAULTS(), COIN_ID_MAP[sym] === x.id ? {} : { cgId: x.id });
-    userSettings[sym] = settings;
-    const g = userSettings.__GLOBAL__;
-    if (g && Array.isArray(g.removedCoins)) g.removedCoins = g.removedCoins.filter(c => c !== sym);
-    syncCoinList(); saveSettings();
     closePanels();
-    showToast(`已新增 ${sym}`);
-    await syncOps({ set: { [sym]: settings }, unRemove: [sym] });
+    await createCard(key, settings);
     fetchExchangeData(true);
+}
+
+// 建立一張卡片（新幣種，或同幣種的第 2 張以後）
+async function createCard(key, settings) {
+    userSettings[key] = settings;
+    const base = baseOf(key), src = COIN_LIST.find(c => baseOf(c) === base && c !== key);
+    if (src && marketData[src]) marketData[key] = Object.assign({}, marketData[src]);
+    const g = userSettings.__GLOBAL__;
+    if (g && Array.isArray(g.removedCoins)) g.removedCoins = g.removedCoins.filter(c => c !== key);
+    syncCoinList(); saveSettings();
+    gdUpdate();
+    showToast(`已新增 ${base}${dupNo(key) ? ' #' + dupNo(key) : ''}`);
+    await syncOps({ set: { [key]: settings }, unRemove: [key] });
 }
 
 // ===================== 資金看板（計算與 v9.2 相同） =====================
