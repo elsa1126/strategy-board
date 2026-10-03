@@ -17,7 +17,7 @@ const ADMIN_PASS_HASH = '9c75ec65e3f939311c459b38fe6740b59ff376d7d620af6ac5aca61
 // 安全模式：部署 worker/ 資料夾裡的 Cloudflare Worker 之後，把網址填在這裡（結尾不要加斜線）
 // 填了之後，讀寫雲端、管理員登入、CoinGecko 報價都改走 Worker，網頁不再需要上面的 DEFAULT_API_KEY
 // 詳細步驟見 worker/部署說明.md
-const WORKER_URL = '';
+const WORKER_URL = 'https://strategy-board-api.elsa-board.workers.dev';
 
 // ===================== CoinGecko 報價設定 =====================
 // 👇 請在這裡填入你的 CoinGecko API 金鑰
