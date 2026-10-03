@@ -527,3 +527,6 @@ input.field { color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* 同幣種第 2 張以後的卡片編號 */
+.dup { margin-left: 5px; font-size: 11px; font-weight: 600; color: var(--text-3); letter-spacing: 0; }
