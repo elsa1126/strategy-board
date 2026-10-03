@@ -71,7 +71,7 @@ const COIN_ID_MAP = {
     'NOT': 'notcoin', 'OM': 'mantra-dao', 'ONE': 'harmony', 'OXT': 'orchid-protocol',
     'PENGU': 'pudgy-penguins', 'PEOPLE': 'constitutiondao', 'PEPE': 'pepe', 'PHA': 'pha',
     'PI': 'pi-network', 'PIXEL': 'pixels', 'PNUT': 'peanut-the-squirrel', 'POL': 'polygon-ecosystem-token',
-    'POND': 'marlin', 'PORTAL': 'portal', 'PSG': 'paris-saint-germain-fan-token', 'PYTH': 'pyth-network',
+    'POND': 'marlin', 'PORTAL': 'portal-2', 'PSG': 'paris-saint-germain-fan-token', 'PYTH': 'pyth-network',
     'QKC': 'quark-chain', 'RAD': 'radicle', 'RARE': 'superrare', 'RATS': 'rats',
     'RDNT': 'radiant-capital', 'RSR': 'reserve-rights-token', 'RUNE': 'thorchain', 'SAND': 'the-sandbox',
     'SATS': 'sats-ordinals', 'SEI': 'sei-network', 'SFP': 'safepal', 'SHIB': 'shiba-inu',
