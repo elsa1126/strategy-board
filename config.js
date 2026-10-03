@@ -10,7 +10,6 @@ const REMOVED_COINS = ['GEAR', 'XRP', 'ETH'];   // 已刪除的幣種（本機�
 
 // ===================== 雲端同步（JSONBin） =====================
 const DEFAULT_BIN_ID = '69ef8fb0856a6821897b7cf0';
-const DEFAULT_API_KEY = '$2a$10$7hoFNnd/YF8ugM4NxoifIubFXp7cDTdzZKsB8uuR2vxc0cX8cbSAC';
 const ADMIN_USER_HASH = '7422fab7937e72abc389c718350e0f85fefe37c26800b5e4e2b97be8aeeeb0d0';
 const ADMIN_PASS_HASH = '9c75ec65e3f939311c459b38fe6740b59ff376d7d620af6ac5aca61294a91930';
 
