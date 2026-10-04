@@ -46,7 +46,7 @@ const COIN_ID_MAP = {
     '1INCH': '1inch', 'A': 'vaulta', 'A2Z': 'arena-z', 'AB': 'ab',
     'ACH': 'alchemy-pay', 'ACT': 'act-i-the-ai-prophecy', 'AEVO': 'aevo-exchange', 'AGI': 'delysium',
     'AI': 'sleepless-ai', 'ALGO': 'algorand', 'ALT': 'altlayer', 'ANIME': 'anime',
-    'APE': 'apecoin', 'APT': 'aptos', 'ARPA': 'arpa', 'AWE': 'awe', 'ATA': 'ata',
+    'APE': 'apecoin', 'APT': 'aptos', 'ARPA': 'arpa', 'AWE': 'awe', 'ATA': 'automata',
     'AXS': 'axie-infinity', 'BABYDOGE': 'baby-doge-coin', 'BAN': 'comedian', 'BEL': 'bella-protocol',
     'BLUR': 'blur', 'BOME': 'book-of-meme', 'BONK': 'bonk', 'C98': 'coin98',
     'CAKE': 'pancakeswap-token', 'CAT': 'simon-s-cat', 'CELR': 'celer-network', 'CFX': 'conflux-token',
