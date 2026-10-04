@@ -60,7 +60,7 @@ const COIN_ID_MAP = {
     'GALA': 'gala', 'GMT': 'stepn', 'GOAT': 'goatseus-maximus',
     'GRT': 'the-graph', 'GT': 'gatechain-token', 'HBAR': 'hedera-hashgraph', 'HFT': 'hashflow',
     'HIGH': 'highstreet', 'HIVE': 'hive', 'HMSTR': 'hamster-kombat', 'HOOK': 'hooked-protocol',
-    'HTX': 'htx-dao', 'ICP': 'internet-computer', 'ID': 'space-id', 'IDEX': 'idex', 'IMX': 'immutable-x',
+    'HTX': 'htx-dao', 'ICP': 'internet-computer', 'ID': 'space-id', 'IDEX': 'aurora-dao', 'IMX': 'immutable-x',
     'IO': 'io', 'IOST': 'iostoken', 'IOTA': 'iota', 'IQ': 'everipedia',
     'JASMY': 'jasmycoin', 'JOE': 'joe', 'KAVA': 'kava', 'KDA': 'kadena',
     'KNC': 'kyber-network-crystal', 'LAT': 'platon-network', 'LINK': 'chainlink', 'LRC': 'loopring',
