@@ -10,11 +10,11 @@ const REMOVED_COINS = ['GEAR', 'XRP', 'ETH'];   // 已刪除的幣種（本機�
 
 // ===================== 雲端同步（JSONBin） =====================
 const DEFAULT_BIN_ID = '69ef8fb0856a6821897b7cf0';
-const ADMIN_USER_HASH = '7422fab7937e72abc389c718350e0f85fefe37c26800b5e4e2b97be8aeeeb0d0';
-const ADMIN_PASS_HASH = '9c75ec65e3f939311c459b38fe6740b59ff376d7d620af6ac5aca61294a91930';
+
+// 管理員帳密的檢查已經搬到 Worker（安全模式），網頁這邊不再放帳密雜湊
 
 // 安全模式：部署 worker/ 資料夾裡的 Cloudflare Worker 之後，把網址填在這裡（結尾不要加斜線）
-// 填了之後，讀寫雲端、管理員登入、CoinGecko 報價都改走 Worker，網頁不再需要上面的 DEFAULT_API_KEY
+// 填了之後，讀寫雲端、管理員登入、CoinGecko 報價都改走 Worker，網頁不再全面依賴 API_KEY
 // 詳細步驟見 worker/部署說明.md
 const WORKER_URL = 'https://strategy-board-api.elsa-board.workers.dev';
 

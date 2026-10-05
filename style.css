@@ -62,8 +62,8 @@ input, select {
 
 input:focus, select:focus { border-color: var(--line-3); }
 input::placeholder { color: var(--text-3); }
-input[type=number] { -moz-appearance: textfield; }
-input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
 input[type=search]::-webkit-search-cancel-button { display: none; }
 :focus-visible { outline: 2px solid var(--text-2); outline-offset: 2px; }
 input:focus-visible, select:focus-visible { outline: none; }

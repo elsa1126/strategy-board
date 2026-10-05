@@ -259,13 +259,15 @@ const Cloud = {
     async read() {
         if (this.workerMode) { const d = await this.workerCall('/data'); if (!d.record) throw new Error('雲端沒有資料'); return d.record; }
         if (!this.bin) throw new Error('請填寫 Bin ID');
-        const r = await fetchWithTimeout('https://api.jsonbin.io/v3/b/' + encodeURIComponent(this.bin) + '/latest', 15000, { headers: { 'X-Master-Key': DEFAULT_API_KEY } });
+        const key = typeof DEFAULT_API_KEY !== 'undefined' ? DEFAULT_API_KEY : '';
+        const r = await fetchWithTimeout('https://api.jsonbin.io/v3/b/' + encodeURIComponent(this.bin) + '/latest', 15000, { headers: { 'X-Master-Key': key } });
         const d = await r.json();
         if (!d.record) throw new Error(d.message || ('HTTP ' + r.status));
         return d.record;
     },
     async write(rec) {
-        const r = await fetchWithTimeout('https://api.jsonbin.io/v3/b/' + encodeURIComponent(this.bin), 20000, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Master-Key': DEFAULT_API_KEY }, body: JSON.stringify(rec) });
+        const key = typeof DEFAULT_API_KEY !== 'undefined' ? DEFAULT_API_KEY : '';
+        const r = await fetchWithTimeout('https://api.jsonbin.io/v3/b/' + encodeURIComponent(this.bin), 20000, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Master-Key': key }, body: JSON.stringify(rec) });
         if (r.status === 401 || r.status === 403) throw new Error('雲端授權錯誤');
         if (!r.ok) { let m = ''; try { m = (await r.json()).message || ''; } catch (e) {} throw new Error(m || ('HTTP ' + r.status)); }
     },
@@ -275,6 +277,7 @@ const Cloud = {
             if (!d.token) throw new Error('登入失敗');
             store.set('adminToken', d.token);
         } else {
+            if (typeof ADMIN_USER_HASH === 'undefined' || typeof ADMIN_PASS_HASH === 'undefined') throw new Error('管理員登入需要安全模式（config.js 的 WORKER_URL）');
             if (await sha256(user) !== ADMIN_USER_HASH || await sha256(pass) !== ADMIN_PASS_HASH) throw new Error('帳號或密碼錯誤');
             store.set('isAdmin', 'true');
         }
@@ -304,7 +307,8 @@ const Cloud = {
         return record;
     },
     async createBin(record) {
-        const r = await fetch('https://api.jsonbin.io/v3/b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Master-Key': DEFAULT_API_KEY, 'X-Bin-Name': 'AltcoinVaultSync', 'X-Bin-Private': 'false' }, body: JSON.stringify(record) });
+        const key = typeof DEFAULT_API_KEY !== 'undefined' ? DEFAULT_API_KEY : '';
+        const r = await fetch('https://api.jsonbin.io/v3/b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Master-Key': key, 'X-Bin-Name': 'AltcoinVaultSync', 'X-Bin-Private': 'false' }, body: JSON.stringify(record) });
         const d = await r.json();
         if (!d.record) throw new Error(d.message || JSON.stringify(d));
         return d.metadata.id;
