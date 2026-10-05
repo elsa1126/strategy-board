@@ -43,7 +43,7 @@ const MIN_FETCH_GAP_MS = 60000;   // 非定時觸發（切回前景、雲端同�
 
 // 幣種代號 → CoinGecko 幣 ID。新增幣種時請在這裡補一行；沒對照的幣會顯示「暫無報價」
 const COIN_ID_MAP = {
-    '1INCH': '1inch', 'A': 'vaulta', 'A2Z': 'arena-z', 'AB': 'ab',
+    '1INCH': '1inch', 'A': 'vaulta', 'A2Z': 'arena-z', 'AB': 'newton-project',
     'ACH': 'alchemy-pay', 'ACT': 'act-i-the-ai-prophecy', 'AEVO': 'aevo-exchange', 'AGI': 'delysium',
     'AI': 'sleepless-ai', 'ALGO': 'algorand', 'ALT': 'altlayer', 'ANIME': 'anime',
     'APE': 'apecoin', 'APT': 'aptos', 'ARPA': 'arpa', 'AWE': 'awe', 'ATA': 'automata',
