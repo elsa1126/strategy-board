@@ -351,7 +351,8 @@ async function fetchFromCloud(silent = false) {
     if (!Cloud.configured()) { if (!silent) showToast('請填寫 Bin ID', 'error'); return null; }
     try {
         const rec = await Cloud.read();
-        const res = mergeCloudRecord(rec);
+        const res = mergeCloudRecord(withPending(rec));
+        if (pendingOps.length && Cloud.isAdmin && !retryTimer) flushPending().catch(() => {});
         if (!editingCoin && Object.keys(marketData).length) renderCards();
         gdUpdate();
         fetchExchangeData();
@@ -370,17 +371,91 @@ function saveSyncConfig() {
     renderMode();
 }
 
+// ===================== 待同步佇列 =====================
+// 改動先排進佇列（存在這台裝置），再送到雲端。雲端暫時忙碌（例如 JSONBin 429）時保留在佇列裡自動重試，
+// 而且每次從雲端讀到資料，都會先把還沒送出的改動疊上去，所以改動不會被下一次同步蓋掉
+let pendingOps = store.json('pendingOpsV10', []);
+if (!Array.isArray(pendingOps)) pendingOps = [];
+let flushing = null;
+let retryTimer = null;
+let retryDelay = 0;
+const RETRY_MIN_MS = 15000, RETRY_MAX_MS = 300000;
+
+function savePending() { store.set('pendingOpsV10', JSON.stringify(pendingOps)); }
+
+/** 依序的多筆改動合併成一筆，結果與逐筆套用相同（applyPatch 的順序是 set → del → 移除清單 → 清除通知） */
+function mergeOps(list) {
+    const m = { set: {}, del: [], global: {}, addRemoved: [], unRemove: [], clearNotif: false };
+    const drop = (arr, k) => { const i = arr.indexOf(k); if (i >= 0) arr.splice(i, 1); };
+    for (const op of list) {
+        Object.keys(op.set || {}).forEach(k => { m.set[k] = op.set[k]; drop(m.del, k); });
+        (op.del || []).forEach(k => { delete m.set[k]; if (!m.del.includes(k)) m.del.push(k); });
+        Object.assign(m.global, op.global || {});
+        (op.addRemoved || []).forEach(k => { drop(m.unRemove, k); if (!m.addRemoved.includes(k)) m.addRemoved.push(k); });
+        (op.unRemove || []).forEach(k => { drop(m.addRemoved, k); if (!m.unRemove.includes(k)) m.unRemove.push(k); });
+        if (op.clearNotif) m.clearNotif = true;
+    }
+    const out = {};
+    if (Object.keys(m.set).length) out.set = m.set;
+    if (m.del.length) out.del = m.del;
+    if (Object.keys(m.global).length) out.global = m.global;
+    if (m.addRemoved.length) out.addRemoved = m.addRemoved;
+    if (m.unRemove.length) out.unRemove = m.unRemove;
+    if (m.clearNotif) out.clearNotif = true;
+    return out;
+}
+
+/** 雲端資料疊上還沒送出的改動（畫面用；不會改到傳進來的那份） */
+function withPending(rec) {
+    if (!pendingOps.length || !rec) return rec;
+    const copy = JSON.parse(JSON.stringify(rec));
+    pendingOps.forEach(op => applyPatch(copy, op));
+    return copy;
+}
+
+function scheduleRetry() {
+    clearTimeout(retryTimer);
+    if (!pendingOps.length) { retryDelay = 0; return; }
+    retryDelay = Math.min(RETRY_MAX_MS, Math.max(RETRY_MIN_MS, retryDelay * 2));
+    retryTimer = setTimeout(() => {
+        retryTimer = null;
+        flushPending().then(() => showToast('先前沒同步成功的改動，已經補傳到雲端')).catch(() => {});
+    }, retryDelay);
+}
+
+/** 把佇列裡的改動合併成一次送出；同一時間只會有一個在送 */
+function flushPending() {
+    if (flushing) return flushing;
+    flushing = (async () => {
+        while (pendingOps.length) {
+            if (!Cloud.isAdmin) throw new Error('需要管理員權限');
+            const n = pendingOps.length;
+            const rec = await Cloud.patch(mergeOps(pendingOps.slice(0, n)));
+            pendingOps.splice(0, n);
+            savePending();
+            if (rec) mergeCloudRecord(withPending(rec));
+        }
+        clearTimeout(retryTimer);
+        retryTimer = null;
+        retryDelay = 0;
+        renderStatus();
+    })().catch(e => { renderStatus(); if (Cloud.isAdmin) scheduleRetry(); throw e; })
+        .finally(() => { flushing = null; });
+    return flushing;
+}
+
 // 儲存本機後同步到雲端（管理員才會上傳）
 async function syncOps(ops, okMsg) {
     if (!Cloud.isAdmin) return false;
+    pendingOps.push(ops);
+    savePending();
     setSaving(true);
     try {
-        const rec = await Cloud.patch(ops);
-        if (rec) mergeCloudRecord(rec);
+        await flushPending();
         if (okMsg) showToast(okMsg);
         return true;
     } catch (e) {
-        showToast('已存在本機，但雲端同步失敗：' + e.message, 'error');
+        showToast(Cloud.isAdmin ? '雲端暫時沒有回應，改動已存在這台裝置，會自動重試：' + e.message : '已存在本機，但雲端同步失敗：' + e.message, 'error');
         return false;
     } finally {
         setSaving(false);
@@ -598,6 +673,7 @@ function renderStatus() {
     const el = $('#status'); if (!el) return;
     let { state, text, title } = priceState;
     if (saving) { state = 'loading'; text = '儲存中…'; }
+    else if (pendingOps.length && Cloud.isAdmin) { state = 'warn'; text = '待同步 ' + pendingOps.length; title = '有改動還沒傳到雲端（已存在這台裝置），會自動重試'; }
     else if (editingCoin) { state = 'warn'; text = '編輯中'; title = '編輯時畫面暫停更新，存檔或關閉後恢復'; }
     el.dataset.state = state;
     $('#status-text').textContent = text;
@@ -1377,6 +1453,7 @@ async function doLogin() {
         $('#admin-user').value = ''; $('#admin-pass').value = '';
         renderMode(); renderCards();
         showToast('登入成功');
+        if (pendingOps.length) flushPending().then(() => showToast('先前沒同步成功的改動，已經補傳到雲端')).catch(() => {});
     } catch (e) {
         showToast('登入失敗：' + e.message, 'error');
     } finally { btn.disabled = false; btn.textContent = '登入'; }
